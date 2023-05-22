@@ -44,7 +44,9 @@ train_masks = torch.tensor(train_encodings['attention_mask']).to(device)
 train_labels = torch.tensor(train_labels.values).to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 num_epochs = 5
-batch_size = 16
+batch_size = 4  # Tamaño de lote reducido
+accumulation_steps = 4  # Número de pasos de acumulación de gradientes
+total_loss = 0
 
 model.train()
 for epoch in range(num_epochs):
@@ -55,8 +57,19 @@ for epoch in range(num_epochs):
         batch_labels = train_labels[i:i+batch_size]
         outputs = model(input_ids=batch_inputs, attention_mask=batch_masks, labels=batch_labels)
         loss = outputs.loss
+        loss = loss / accumulation_steps  # Dividir la pérdida por el número de pasos de acumulación
         loss.backward()
-        optimizer.step()
+        
+        total_loss += loss.item()
+        
+        if (i+1) % accumulation_steps == 0:  # Realizar una actualización de los pesos después de un cierto número de pasos de acumulación
+            optimizer.step()
+            optimizer.zero_grad()
+            
+    # Imprimir la pérdida promedio por época
+    average_loss = total_loss / (len(train_inputs) / batch_size)
+    print(f"Epoch {epoch + 1}: Average Loss = {average_loss}")
+    total_loss = 0
 
 # Evaluación del modelo
 model.eval()
